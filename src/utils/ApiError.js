@@ -13,6 +13,7 @@ class ApiError extends Error {
         this.success = false;
 
         // production level code , can be neglected in development
+        
         if(stack){
             this.stack = stack;
         }else{
@@ -21,6 +22,6 @@ class ApiError extends Error {
 
     }
 
-}
+} 
 
 export default ApiError;
