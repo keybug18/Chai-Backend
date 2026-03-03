@@ -23,4 +23,4 @@ app.use(express.static( " public" ));  /* to serve static files from a specified
 
 app.use(cookieParser()); /* to parse cookies attached to the client request object. This middleware allows the server to easily access and manipulate cookies sent by the client, which can be useful for session management, authentication, and other purposes. */
  
-export default app;               
+export default app;                
