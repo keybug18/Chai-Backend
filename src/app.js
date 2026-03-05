@@ -22,5 +22,16 @@ app.use(express.urlencoded({
 app.use(express.static( " public" ));  /* to serve static files from a specified directory. This means that any files (such as images, CSS, JavaScript) placed in the designated directory can be accessed directly via URLs without needing specific routes to handle those requests. */
 
 app.use(cookieParser()); /* to parse cookies attached to the client request object. This middleware allows the server to easily access and manipulate cookies sent by the client, which can be useful for session management, authentication, and other purposes. */
+
+
+// ROUTES IMPORT 
+import userRouter from './routes/user.routes.js';
+// ROUTES DECLARATION
+app.use("/api/v1/users" , userRouter);
+
+
+
+
+
  
 export default app;                
