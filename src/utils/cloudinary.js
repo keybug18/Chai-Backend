@@ -22,6 +22,8 @@ const uploadOnCloudinary = async (localFilePath) => {
             response.url
         );
 
+        fs.unlinkSync(localFilePath); /* to remove the file from the server after it has been uploaded to Cloudinary. This is done to free up storage space on the server and ensure that temporary files do not accumulate over time. */
+
         return response.url;
 
     }

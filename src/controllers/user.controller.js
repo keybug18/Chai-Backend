@@ -1,11 +1,28 @@
  // import {asyncHandler} from 'express-async-handler.js';
 import asyncHandler from "express-async-handler";
-import {ApiError} from "../utils/apiError.js";
-import User from "../models/user.model.js";
+import { ApiError } from "../utils/ApiError.js";
+import {User} from "../models/e-commerce/user.model.js";
 import {uploadOnCloudinary} from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
+const generateAccessAndRefreshTokens = async (userId) => {
+  try{
+    const user = await User.findById(userId)
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
 
+    // save refresh token in database
+    user.refreshToken = refreshToken;
+    await user.save({validateBeforeSave : false});
+
+    // return access token and refresh token
+    return {accessToken , refreshToken};
+
+  }catch(error){
+    throw new ApiError(500 , "Error generating tokens");
+  }
+}
 
 const registerUser = asyncHandler(async (req, res) => {
   
@@ -92,6 +109,194 @@ const registerUser = asyncHandler(async (req, res) => {
      
 })
 
+
+// Login User 
+
+const loginUser = asyncHandler(async (req, res) => {
+  
+
+  // req.body -> email , password
+  const{email,username,password} = req.body;
+  
+  // validate email, username and password - not empty
+  if(!username && !email){
+    throw new ApiError(400 , "Email or username is required");
+  }     
+
+  // find user in database by email
+  const user = await User.findOne({
+    $or :[
+      {username},{email}
+    ]
+  })
+
+  if(!user){
+    throw new ApiError(404 , "User not found with this email or username");
+  }
+
+  // password check
+  const isPasswordCorrect = await user.isPasswordCorrect(password);
+
+  if(!isPasswordCorrect){
+    throw new ApiError(401 , "Invalid password");
+  }
+
+
+  // generate access token and refresh token
+  const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id);
+
+  // send cookies and response 
+  const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+  // send access token and refresh token in http only cookies with secure and same site options
+  const options = {
+    httpOnly : true,
+    secure : true,
+    sameSite : "strict",
+    maxAge : 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+
+  // return response with cookies
+  return res
+  .status(200)
+  .cookie("acessToken" , accessToken , options)
+  .cookie("refreshToken" , refreshToken , options)
+  .json(
+    new ApiResponse(
+      200,
+      {
+        user : loggedInUser,
+        accessToken,
+        refreshToken
+      },
+      "User logged in successfully"
+    )
+  )
+
+})
+
+
+// LOG OUT USER
+
+const logoutUser = asyncHandler(async (req, res) => {
+
+  // clear access token and refresh token from cookies
+  await User.findByIdAndUpdate(
+    req.user._id,{
+      $set:{
+        refreshToken : undefined
+      }
+    },
+    {
+       
+      new: true
+      
+    }
+  )                                  
+
+  // clear cookies with secure and same site options
+
+  const options = {
+    httpOnly : true,
+    secure : true,
+    sameSite : "strict",
+    expires : new Date(0) // expire the cookie immediately
+  }
+
+  return res.status(200)
+  .clearCookie("accessToken" , options)
+  .clearCookie("refreshToken" , options)
+  .json(
+    new ApiResponse(
+      200,
+      null,
+      "User logged out successfully"
+    )
+  )
+
+
+});
+
+// refresh access token
+const refreshAccessToken = asyncHandler(async (req, res) => {
+
+  // get refresh token from cookies or request body
+  const incommingRefreshToken = req.body.refreshToken
+
+  // validate refresh token
+  if(!incommingRefreshToken){
+    throw new ApiError(401 , "Unauthorised Request");
+  }
+
+  try {
+    // verify refresh token
+    const decodedToken = jwt.verify(incommingRefreshToken ,
+       process.env.REFRESH_TOKEN_SECRET )
+  
+    // find user by id from decoded token and check if refresh token matches
+    const user = await User.findById(decodedToken?._id);
+  
+    // if user not found or refresh token does not match throw error
+    if(!user){
+      throw new ApiError(401 , "Invalid refresh token - user not found");
+    }
+  
+    // check if refresh token matches the one in database
+     
+    if(incommingRefreshToken !== user?.refreshToken){
+      throw new ApiError(401 , "Invalid refresh token - token mismatch");
+    }
+  
+    // generate new access token
+    const options = {
+      httpOnly : true,
+      secure : true,
+      sameSite : "strict",
+      maxAge : 7 * 24 * 60 * 60 * 1000 // 7 days
+    }
+  
+    // generate new access token and refresh token
+    const {accessToken , newRefreshToken} = await generateAccessAndRefreshTokens(user._id);    
+    
+    // return new access token and refresh token in cookies and response
+    return res.status(200)
+    .cookie("accessToken" , accessToken , options)
+    .cookie("refreshToken" , newRefreshToken , options)
+    .json(
+      new ApiResponse(
+        200,
+        { accessToken , refreshToken : newRefreshToken },
+        "Access token refreshed successfully"
+      )
+    )
+  } catch (error) {
+    throw new ApiError(401 , "error?.message || Invalid refresh token");
+  }
+
+
+})
+
+
+
+
+
+
+
+
+
+
+
 export {
-  registerUser
-}                                                         
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken
+}
+
+
+
+// let coverimagelocalpath;
+// if(req,files && Array.isArray(req.files.coverimage) && req.files.coverimage.length > 0){
+//   coverimagelocalpath = req.files.coverimage[0].path;
+// }
+ /* This code checks if the `req.files` object exists and if it contains a `coverimage` property that is an array with at least one element. If these conditions are met, it assigns the local file path of the first cover image to the variable `coverimagelocalpath`. This is typically used in scenarios where multiple files can be uploaded, and we want to ensure that we are accessing the correct file path for further processing, such as uploading to a cloud storage service. */
